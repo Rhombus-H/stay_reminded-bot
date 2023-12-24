@@ -6,6 +6,6 @@ https://t.me/stay_reminded_bot
 
 Требования:
 - python 3.12.0
-- aiogram 3.2.0
+- aiogram 2.23.1
 - python-dotenv 1.0.0
 
