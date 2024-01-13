@@ -18,7 +18,7 @@ main_table = [
         callback_data='add_file'),
      InlineKeyboardButton(
         text='🗑 Удалить материал',
-        callback_data='delete_file')]
+        callback_data='delete_file')],
     [InlineKeyboardButton(
         text='📄 Список материалов',
         callback_data='list_files'),
@@ -26,35 +26,46 @@ main_table = [
         text='📋 Список напоминалок',
         callback_data='list_reminders')],
     [InlineKeyboardButton(
-        text='⚙️ Настройки',
-        callback_data='bot_settings'),
+        text='⚙️ Настроить часовой пояс',
+        callback_data='set_timezone'),
      InlineKeyboardButton(
         text='📚 Помощь',
         callback_data='bot_help')]
 ]
-file_choice_table = [
-    [InlineKeyboardButton(
-        text='Загрузить фото',
-        callback_data='add_photo'),
-     InlineKeyboardButton(
-        text='Загрузить видео',
-        callback_data='add_video')],
-    [InlineKeyboardButton(
-        text='Загрузить документ',
-        callback_data='add_document'),
-     InlineKeyboardButton(
-        text='Загрузить аудио',
-        callback_data='add_audio')]
-]
+# file_choice_table = [
+#     [InlineKeyboardButton(
+#         text='Загрузить фото',
+#         callback_data='add_photo'),
+#      InlineKeyboardButton(
+#         text='Загрузить видео',
+#         callback_data='add_video')],
+#     [InlineKeyboardButton(
+#         text='Загрузить документ',
+#         callback_data='add_document'),
+#      InlineKeyboardButton(
+#         text='Загрузить аудио',
+#         callback_data='add_audio')]
+# ]
+
+time_zones_table = []
+for i in range(-11, 13):
+    time_zones_table.append(
+        [InlineKeyboardButton(text=f'UTC+{i}', callback_data=f'tz_{i}')]
+    )
+time_zones_table = InlineKeyboardMarkup(
+    inline_keyboard=time_zones_table,
+    one_time_keyboardone_time_keyboard=True,
+    resize_keyboard=True
+)
 main_table = InlineKeyboardMarkup(
     inline_keyboard=main_table,
     one_time_keyboardone_time_keyboard=True)
 
-file_choice_table = InlineKeyboardMarkup(
-    inline_keyboard=file_choice_table,
-    one_time_keyboardone_time_keyboard=True)
+# file_choice_table = InlineKeyboardMarkup(
+#     inline_keyboard=file_choice_table,
+#     one_time_keyboardone_time_keyboard=True)
 close_keyboard = ReplyKeyboardMarkup(
-    [[KeyboardButton(text='Выйти в меню')]],
+    keyboard=[[KeyboardButton(text='Выйти в меню')]],
     resize_keyboard=True)
 iclose_keyboard = InlineKeyboardMarkup(
     inline_keyboard=[[InlineKeyboardButton(
