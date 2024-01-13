@@ -1,30 +1,25 @@
 import asyncio
 from aiogram import Bot, Dispatcher
-from core.handlers.base import get_started, bot_shutdown, bot_startup
-from core.handlers.reminder import remind_command, reminder_checker
-from core.middleware.database_connect import init_reminder_dic
+from aiogram.fsm.storage.memory import MemoryStorage
 import logging
 from core.middleware import settings
+from core.handlers import router
+# from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 
 async def start():
     logging.basicConfig(
         level=logging.INFO,
-        filename='bot_log.log',
+        filename='bot.log',
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
 
-    reminders_dic = init_reminder_dic()
-
     bot = Bot(token=settings.TOKEN_API_KEY)
 
-    dp = Dispatcher()
+    dp = Dispatcher(storage=MemoryStorage())
+    dp.include_router(router)
 
-    dp.startup.register(bot_startup(bot, admin_chat_id=settings.ADMIN_ID))
-    dp.shutdown.register(bot_shutdown(bot, admin_chat_id=settings.ADMIN_ID))
-
-    dp.register_message_handler(remind_command, commands=['remind'], state='*')
-    await asyncio.create_task(reminder_checker(bot))
+    # scheduler = AsyncIOScheduler()
     try:
         await dp.start_polling(bot)
     finally:
