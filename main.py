@@ -5,7 +5,7 @@ import logging
 from core.handlers import router
 from core.config_parser import load_config
 from core.commands import set_commands
-# from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 
 async def start():
@@ -19,6 +19,9 @@ async def start():
     bot = Bot(token=settings.bot.TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
     dp.include_router(router)
+
+    apsched = AsyncIOScheduler()
+
     await set_commands(bot)
     # scheduler = AsyncIOScheduler()
     try:
