@@ -39,6 +39,14 @@ async def menu(message: types.Message):
         reply_markup=core.keyboards.main_table)
 
 
+@router.callback_query(F.data == 'bot_help')
+async def get_help(callback: types.CallbackQuery):
+    await callback.message.edit_text(
+        core.locale.help,
+        reply_markup=core.keyboards.iclose_keyboard
+    )
+
+
 @router.callback_query(F.data == 'set_timezone')
 async def get_timezone(callback: types.CallbackQuery):
     await callback.message.edit_text(
