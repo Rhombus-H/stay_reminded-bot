@@ -21,7 +21,7 @@ async def reminder_task(bot: Bot, chat_id, message):
 async def schedule_reminders(bot: Bot):
     async with aiosqlite.connect(settings.bot.DB_PATH) as db:
         data = await db.execute_fetchall(f'''SELECT * FROM reminders WHERE scheduled = 0''')
-        await db.execute(f'''UPDATE reminders SET scheduled = 1 where scheduled = 0''')
+        await db.execute(f'''UPDATE reminders SET scheduled = 1 WHERE scheduled = 0''')
         await db.commit()
     for i in data:
         text, time, user_id, repeat, period = i[:5]
@@ -49,7 +49,7 @@ async def start():
     dp = Dispatcher(storage=MemoryStorage())
     dp.include_router(router)
 
-    apsched.add_job(schedule_reminders(bot=bot), 'interval', minutes=1)
+    apsched.add_job(schedule_reminders, args=[bot], trigger='interval', minutes=1)
     await set_commands(bot)
     # scheduler = AsyncIOScheduler()
     try:

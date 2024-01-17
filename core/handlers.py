@@ -16,8 +16,13 @@ settings = load_config('config.ini')
 
 @router.message(Command('start'))
 async def start(message: types.Message):
-    async with aiosqlite.connect(settings.bot.DB_PATH) as db:
-        await db.execute(f'UPDATE users SET user_id = ?', (message.from_user.id,))
+    db = await aiosqlite.connect(settings.bot.DB_PATH)
+    cur = await db.cursor()
+    await cur.execute(f'INSERT OR IGNORE INTO users (user_id) VALUES ({message.from_user.id})')
+    print('ase')
+    await db.commit()
+    await cur.close()
+    await db.close()
     await message.answer(
         core.locale.start,
         reply_markup=core.keyboards.main_table)
@@ -69,46 +74,54 @@ async def get_reminder_type(message: types.Message, state: FSMContext):
     else:
         await state.set_state(SetReminder.reminder_time_input)
         await message.answer(core.locale.reminder_time)
-    await state.update_data(reminder_type=message)
+    await state.update_data(reminder_type=message.text)
 
 
 @router.message(SetReminder.reminder_period_input)
 async def get_reminder_period(message: types.Message, state: FSMContext):
     await state.set_state(SetReminder.reminder_text_input)
-    await state.update_data(reminder_period=message)
+    await state.update_data(reminder_period=message.text)
     await message.answer(core.locale.reminder_text)
 
 
 @router.message(SetReminder.reminder_time_input)
 async def get_reminder_time(message: types.Message, state: FSMContext):
     await state.set_state(SetReminder.reminder_text_input)
-    await state.update_data(reminder_time=message)
+    await state.update_data(reminder_time=message.text)
     await message.answer(core.locale.reminder_text)
 
 
 @router.message(SetReminder.reminder_text_input)
 async def get_reminder_text(message: types.Message, state: FSMContext):
     await state.set_state(SetReminder.setting_reminder)
-    await state.update_data(reminder_text=message, user_id=message.from_user.id)
+    await state.update_data(reminder_text=message.text, user_id=message.from_user.id)
     await message.answer(core.locale.confirm)
 
 
 @router.message(SetReminder.setting_reminder)
 async def set_reminder(message: types.Message, state: FSMContext):
     # if message.text == core.locale.yes:
-    print('gay')
+    print('test')
     data = await state.get_data()
     print(data)
     user_id, repeat, period, text = data['user_id'], False, '0', data['reminder_text']
     if data['reminder_type'] == core.locale.periodic:
-        repeat, period = True, ''.join(data['reminder_period'].split())
+        print('es')
+        repeat, period = True, ''.join(data['reminder_period'].split()).lower()
+        print('yes')
+    print('no')
     time = data['reminder_time']
+    print('ы')
     print(user_id, repeat, period, text, time)
-    async with aiosqlite.connect(settings.bot.DB_PATH) as db:
-        print('gay')
-        await db.execute(f'''UPDATE reminders
-            SET text, time, user_id, repeat, period = {text}, {time}, {user_id}, {repeat}, {period}''')
-        print('as')
+    db = await aiosqlite.connect(settings.bot.DB_PATH)
+    cur = await db.cursor()
+    print('test')
+    await cur.execute(f'''INSERT INTO reminders 
+    (text, time, user_id, repeat, period) VALUES ({text}, {time}, {user_id}, {repeat}, {period})''')
+    print('as')
+    await db.commit()
+    await cur.close()
+    await db.close()
     await message.answer(core.locale.reminder_set)
     await state.clear()
 
