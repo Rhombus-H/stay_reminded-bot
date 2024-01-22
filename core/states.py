@@ -8,3 +8,11 @@ class SetReminder(StatesGroup):
     reminder_time_after_period = State()
     reminder_time_input = State()
     setting_reminder = State()
+
+
+class DeleteReminder(StatesGroup):
+    awaiting_reminder_name = State()
+
+
+class SetTimezone(StatesGroup):
+    timezone_input = State()
