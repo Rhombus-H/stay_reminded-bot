@@ -12,6 +12,6 @@ WEEKDAYS = {'понедельник': 'monday',
 
 def translate(period: str) -> str:
     translated_period = []
-    for i in period.lower().split():
+    for i in period.lower().split(', '):
         translated_period.append(WEEKDAYS[i])
     return ','.join(translated_period)
