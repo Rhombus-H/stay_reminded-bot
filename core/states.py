@@ -12,6 +12,10 @@ class SetReminder(StatesGroup):
     abort_creation = State()
 
 
+class GetFile(StatesGroup):
+    file_awaiting = State()
+
+
 class DeleteReminder(StatesGroup):
     awaiting_reminder_name = State()
 

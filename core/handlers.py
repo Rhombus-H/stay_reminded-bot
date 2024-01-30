@@ -1,10 +1,10 @@
 import aiosqlite
-from aiogram import F, Router, types
+from aiogram import Bot, F, Router, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 import core.locale
 import core.keyboards
-from core.states import SetReminder, SetTimezone
+from core.states import SetReminder, SetTimezone, GetFile
 from core.config_parser import load_config
 import core.utils
 import datetime
@@ -123,6 +123,7 @@ async def get_reminder_time(message: types.Message, state: FSMContext):
     else:
         await message.answer(core.locale.time_format_invalid)
 
+
 @router.message(SetReminder.reminder_date_input)
 async def get_reminder_date(message: types.Message, state: FSMContext):
     if re.match(re.compile(r'(0[1-9]|1[1,2])\.(0[1-9]|[12][0-9]|3[01])'), message.text):
@@ -130,6 +131,8 @@ async def get_reminder_date(message: types.Message, state: FSMContext):
         await state.set_state(SetReminder.reminder_text_input)
     else:
         await message.answer(core.locale.time_format_invalid)
+
+
 @router.message(SetReminder.reminder_period_input)
 async def get_reminder_period(message: types.Message, state: FSMContext):
     weekdays = set(core.utils.WEEKDAYS.keys())
@@ -189,7 +192,33 @@ async def cancel_notifier_creation(message: types, state: FSMContext):
 
 
 @router.callback_query(F.data == 'add_file')
-async def file_options_choice(callback: types.CallbackQuery):
+async def file_option_choice(callback: types.CallbackQuery, state: FSMContext):
+    await state.set_state(GetFile.file_awaiting)
     await callback.message.edit_text(
         core.locale.file_awaiting,
         reply_markup=core.keyboards.close_keyboard())
+
+
+@router.message(GetFile.file_awaiting)
+async def add_file(message: types.Message, state: FSMContext):
+    if not message.document:
+        await message.answer(core.locale.file_invalid)
+    else:
+        db = aiosqlite.connect(settings.bot.DB_PATH)
+        await db.execute(f'''INSERT INTO files (file_id, name) VALUES (?, ?)''',
+                         (message.document.file_id, message.document.file_name))
+        await db.commit()
+        await db.close()
+        await state.clear()
+        await message.answer(core.locale.file_success)
+
+
+@router.callback_query(F.data == 'list_files')
+async def list_files(callback: types.CallbackQuery, state: FSMContext):
+    db = aiosqlite.connect(settings.bot.DB_PATH)
+    cursor = await db.execute(f'''SELECT file_id, name FROM files WHERE user_id = ?''',
+                              (callback.message.from_user.id,))
+    data = await cursor.fetchall()
+    await callback.message.edit_text(core.locale.file_invalid, reply_markup=core.keyboards.files_list(data))
+
+
