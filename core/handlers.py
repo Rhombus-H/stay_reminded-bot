@@ -20,7 +20,7 @@ settings = load_config('config.ini')
 async def start(message: types.Message):
     db = await aiosqlite.connect(settings.bot.DB_PATH)
     cur = await db.cursor()
-    await cur.execute(f'INSERT OR IGNORE INTO users (user_id) VALUES ({message.from_user.id})')
+    await cur.execute(f'INSERT OR IGNORE INTO users (id) VALUES ({message.from_user.id})')
     print('ase')
     await db.commit()
     await cur.close()
@@ -34,7 +34,7 @@ async def start(message: types.Message):
 async def cancel(message: types.Message, state: FSMContext):
     if await state.get_state():
         await state.clear()
-        await message.answer(core.locale.cancel)
+        await message.answer(core.locale.cancel, reply_markup=core.keyboards.main_table)
 
 
 @router.message(F.text == 'Меню')
@@ -177,7 +177,7 @@ async def set_reminder(message: types.Message, state: FSMContext):
         await cur.close()
         await db.close()
         print('sdsd')
-        await message.answer(core.locale.reminder_set)
+        await message.answer(core.locale.reminder_set, reply_markup=core.keyboards.main_table)
         await state.clear()
     else:
         await message.answer(text=core.locale.abort_notifier_creation)
@@ -187,7 +187,7 @@ async def set_reminder(message: types.Message, state: FSMContext):
 @router.message(SetReminder.abort_creation)
 async def cancel_notifier_creation(message: types, state: FSMContext):
     if message.text.lower() == core.locale.yes:
-        await message.answer(core.locale.cancel)
+        await message.answer(core.locale.cancel, reply_markup=core.keyboards.main_table)
         await state.clear()
 
 
@@ -195,30 +195,33 @@ async def cancel_notifier_creation(message: types, state: FSMContext):
 async def file_option_choice(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(GetFile.file_awaiting)
     await callback.message.edit_text(
-        core.locale.file_awaiting,
-        reply_markup=core.keyboards.close_keyboard())
+        core.locale.file_awaiting)
 
 
 @router.message(GetFile.file_awaiting)
 async def add_file(message: types.Message, state: FSMContext):
-    if not message.document:
+    if message.content_type != types.ContentType.DOCUMENT:
         await message.answer(core.locale.file_invalid)
     else:
-        db = aiosqlite.connect(settings.bot.DB_PATH)
-        await db.execute(f'''INSERT INTO files (file_id, name) VALUES (?, ?)''',
-                         (message.document.file_id, message.document.file_name))
+        db = await aiosqlite.connect(settings.bot.DB_PATH)
+        print('sugoma')
+        query = '''INSERT INTO files (file_id, name, user_id) VALUES (?, ?, ?);'''
+        await db.execute(query, (message.document.file_id, message.document.file_name, message.from_user.id))
+        print('adasdsadas')
         await db.commit()
         await db.close()
         await state.clear()
-        await message.answer(core.locale.file_success)
+        await message.answer(core.locale.file_success, reply_markup=core.keyboards.main_table)
 
 
 @router.callback_query(F.data == 'list_files')
 async def list_files(callback: types.CallbackQuery, state: FSMContext):
-    db = aiosqlite.connect(settings.bot.DB_PATH)
-    cursor = await db.execute(f'''SELECT file_id, name FROM files WHERE user_id = ?''',
-                              (callback.message.from_user.id,))
+    db = await aiosqlite.connect(settings.bot.DB_PATH)
+    cursor = await db.execute(f'''SELECT file_id, name FROM files''')
     data = await cursor.fetchall()
-    await callback.message.edit_text(core.locale.file_invalid, reply_markup=core.keyboards.files_list(data))
-
+    await state.clear()
+    if data:
+        await callback.message.edit_text(core.locale.file_list, reply_markup=core.keyboards.files_list(data))
+    else:
+        await callback.message.edit_text(core.locale.file_list_empty, reply_markup=core.keyboards.main_table)
 

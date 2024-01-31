@@ -32,6 +32,10 @@ def files_list(file_data):
                 callback_data=file_id
             )
         ])
+    return InlineKeyboardMarkup(
+        inline_keyboard=keyboard,
+        resize_keyboard=True
+    )
 
 
 main_table = [
