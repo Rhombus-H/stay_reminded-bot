@@ -21,6 +21,7 @@ reminders_list = 'Выберите из списка интересующую н
 set_timezone = 'Введите новый часовой пояс в формате "UTC+-XX", ХХ может быть "1"'
 timezone_format_invalid = 'Неверный формат часового пояса!'
 time_format_invalid = 'Неверный формат ввода времени!'
+time_selected_invalid = 'Нельзя установить напоминалку на данное время'
 period_format_invalid = 'Дни введены в неверном формате'
 date_format_invalid = 'Неверный формат ввода даты'
 file_invalid = 'Пожалуйста, отправьте файл.'

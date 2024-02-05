@@ -127,8 +127,23 @@ async def get_reminder_time(message: types.Message, state: FSMContext):
 @router.message(SetReminder.reminder_date_input)
 async def get_reminder_date(message: types.Message, state: FSMContext):
     if re.match(re.compile(r'(0[1-9]|1[1,2])\.(0[1-9]|[12][0-9]|3[01])'), message.text):
-        await state.update_data(date=message.text)
-        await state.set_state(SetReminder.reminder_text_input)
+        data = await state.get_data()
+        date = message.text
+        hours, minutes = data['reminder_time'].split(':')[0], data['reminder_time'].split(':')[1]
+        print(hours, minutes)
+        print(datetime.datetime.now().hour, datetime.datetime.now().minute)
+        print('.'.join(datetime.datetime.now().date().strftime('%Y-%m-%d').split('-')[1:][::-1]))
+        print(date)
+        date_now = '.'.join(datetime.datetime.now().date().strftime('%Y-%m-%d').split('-')[1:][::-1])
+        if int(date.split('.')[0]) >= int(date_now.split('.')[0]) and \
+                int(date.split('.')[0]) >= int(date_now.split('.')[0]) and \
+                hours >= datetime.datetime.now().hour and minutes >= datetime.datetime.now().minute:
+            print('dsd')
+            await state.update_data(date=message.text)
+            await state.set_state(SetReminder.reminder_text_input)
+            await message.answer(core.locale.reminder_text)
+        else:
+            await message.answer(core.locale.time_selected_invalid)
     else:
         await message.answer(core.locale.time_format_invalid)
 
@@ -224,4 +239,3 @@ async def list_files(callback: types.CallbackQuery, state: FSMContext):
         await callback.message.edit_text(core.locale.file_list, reply_markup=core.keyboards.files_list(data))
     else:
         await callback.message.edit_text(core.locale.file_list_empty, reply_markup=core.keyboards.main_table)
-
