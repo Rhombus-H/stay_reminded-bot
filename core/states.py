@@ -18,6 +18,7 @@ class GetFile(StatesGroup):
 
 class DeleteReminder(StatesGroup):
     awaiting_reminder_name = State()
+    reminder_deleted = State()
 
 
 class SetTimezone(StatesGroup):
