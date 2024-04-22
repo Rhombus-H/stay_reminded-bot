@@ -16,10 +16,10 @@ settings = load_config('config.ini')
 apsched = AsyncIOScheduler()
 
 
-async def reminder_task(bot: Bot, chat_id, message, time, day):
+async def reminder_task(bot: Bot, chat_id, message, time='', day=''):
     text = f'''<u><b>Напоминание!</b></u>
     
-<b>От:</b> {time}, {day}
+<b>На:</b> {time}, {day}
 <b>Содержание: </b> {message}'''
     text = str(text)
     await bot.send_message(chat_id=chat_id, text=text, parse_mode=ParseMode.HTML)
@@ -33,20 +33,15 @@ async def schedule_reminders(bot: Bot):
     await db.commit()
     await cursor.close()
     await db.close()
-    print(apsched.get_jobs())
     for i in data:
-        print('dassdadas')
         text, time, user_id, period, timezone, scheduled = list(i)[1:7]
         hours = time.split()[0].split(':')[0]
-        print(hours)
         minutes = time.split()[0].split(':')[-1]
-        print(minutes)
         day = time.split()[-1] + '.' + dt.datetime.today().strftime('%Y-%m-%d').split('-')[0]
         time = time.split()[0]
-        print(day)
         if period != 'none':
             apsched.add_job(
-                await reminder_task(bot=bot, chat_id=user_id, message=text, time=time, day=day),
+                reminder_task, kwargs={'bot': bot, 'chat_id': user_id, 'message': text, 'time': time, 'day': period},
                 trigger='cron',
                 start_date=dt.datetime.now(),
                 day_of_week=translate(period),
@@ -55,17 +50,12 @@ async def schedule_reminders(bot: Bot):
                 timezone=timezone + ':00'
             )
         else:
-            print(dt.datetime.strptime(day, '%d.%m.%Y'))
-            print(dt.datetime.strptime(time.split()[0], '%H:%M').time())
-            print(dt.datetime.combine(dt.datetime.strptime(day, '%d.%m.%Y').date(),
-                                      dt.datetime.strptime(time.split()[0], '%H:%M').time()))
             apsched.add_job(
-                await reminder_task(bot=bot, chat_id=user_id, message=text),
+                reminder_task, kwargs={'bot': bot, 'chat_id': user_id, 'message': text, 'time': time, 'day': day},
                 trigger='date',
                 run_date=dt.datetime.combine(dt.datetime.strptime(day, '%d.%m.%Y').date(),
                                              dt.datetime.strptime(time.split()[0], '%H:%M').time())
             )
-            print('rrr')
         apsched.start()
 
 
@@ -83,7 +73,6 @@ async def start():
     await set_commands(bot)
     scheduler = AsyncIOScheduler()
     apsched.add_job(schedule_reminders, trigger='interval', seconds=2, kwargs={'bot': bot})
-    apsched.start()
     try:
         await dp.start_polling(bot)
     finally:
