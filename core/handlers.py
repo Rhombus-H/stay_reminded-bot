@@ -298,7 +298,7 @@ async def list_files(callback: types.CallbackQuery, state: FSMContext):
         await callback.message.edit_text(core.locale.file_list_empty, reply_markup=core.keyboards.main_table)
 
 
-@router.callback_query(UploadFile.file_awaiting)
+@router.callback_query(GetFile.file_awaiting)
 async def get_file(bot: Bot, callback: types.CallbackQuery, state: FSMContext):
     file_id, text = callback.data.split(' ')
     await callback.message.edit_text(text=text)
