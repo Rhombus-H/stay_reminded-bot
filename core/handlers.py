@@ -6,7 +6,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 import core.locale
 import core.keyboards
-from core.states import SetReminder, SetTimezone, GetFile, DeleteReminder
+from core.states import SetReminder, SetTimezone, UploadFile, GetFile, DeleteReminder
 from core.config_parser import load_config
 import core.utils
 import datetime
@@ -65,8 +65,9 @@ async def list_reminders(reminders):
         n, reminder = i
         if reminder['period'] != 'none':
             reminders_list.append([
-                InlineKeyboardButton(text=f'"{reminder['text']}" на {reminder['time']} ({core.utils.shorten(reminder['period'])})',
-                                     callback_data=f'{n}')
+                InlineKeyboardButton(
+                    text=f'"{reminder['text']}" на {reminder['time']} ({core.utils.shorten(reminder['period'])})',
+                    callback_data=f'{n}')
             ])
         else:
             reminders_list.append([
@@ -183,7 +184,7 @@ async def get_reminder_date(message: types.Message, state: FSMContext):
         data = await state.get_data()
         time = datetime.datetime.strptime(data['reminder_time'], '%H:%M').time()
         date = message.text
-        if datetime.datetime.strptime(today, '%d.%m') < datetime.datetime.strptime(date, '%d.%m') or\
+        if datetime.datetime.strptime(today, '%d.%m') < datetime.datetime.strptime(date, '%d.%m') or \
                 datetime.datetime.strptime(today, '%d.%m') == datetime.datetime.strptime(date, '%d.%m') and \
                 time > datetime.datetime.now().time():
             await state.update_data(date=date)
@@ -253,12 +254,12 @@ async def cancel_notifier_creation(message: types, state: FSMContext):
 
 @router.callback_query(F.data == 'add_file')
 async def file_option_choice(callback: types.CallbackQuery, state: FSMContext):
-    await state.set_state(GetFile.file_awaiting)
+    await state.set_state(UploadFile.file_awaiting)
     await callback.message.edit_text(
         core.locale.file_awaiting)
 
 
-@router.message(GetFile.file_awaiting)
+@router.message(UploadFile.file_awaiting)
 async def add_file(message: types.Message, state: FSMContext):
     if message.content_type != types.ContentType.DOCUMENT:
         await message.answer(core.locale.file_invalid)
@@ -272,13 +273,34 @@ async def add_file(message: types.Message, state: FSMContext):
         await message.answer(core.locale.file_success, reply_markup=core.keyboards.main_table)
 
 
+async def create_files_list(files):
+    keyboard = []
+    for i, row in enumerate(files):
+        keyboard.append([InlineKeyboardButton(text=f'file_{i}', callback_data=' '.join(row))])
+    keyboard.append([InlineKeyboardButton(text='Закрыть ❌', callback_data='close_files_list')])
+    keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard)
+    return keyboard
+
+
 @router.callback_query(F.data == 'list_files')
 async def list_files(callback: types.CallbackQuery, state: FSMContext):
     db = await aiosqlite.connect(settings.bot.DB_PATH)
     cursor = await db.execute(f'''SELECT file_id, name FROM files''')
     data = await cursor.fetchall()
-    await state.clear()
+    await cursor.close()
+    await db.close()
     if data:
-        await callback.message.edit_text(core.locale.file_list, reply_markup=core.keyboards.files_list(data))
+        await state.set_state(GetFile.file_awaiting)
+        keyboard = await create_files_list(data)
+        await callback.message.edit_text(text=core.locale.file_list, reply_markup=keyboard)
+        print('dgf')
     else:
         await callback.message.edit_text(core.locale.file_list_empty, reply_markup=core.keyboards.main_table)
+
+
+@router.callback_query(UploadFile.file_awaiting)
+async def get_file(bot: Bot, callback: types.CallbackQuery, state: FSMContext):
+    file_id, text = callback.data.split(' ')
+    await callback.message.edit_text(text=text)
+    await bot.send_document(chat_id=callback.message.chat_id, document=file_id)
+    await state.clear()
