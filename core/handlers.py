@@ -17,6 +17,8 @@ router = Router()
 
 settings = load_config('config.ini')
 
+bot = Bot(token=settings.bot.TOKEN)
+
 
 @router.message(Command('start'))
 async def start(message: types.Message):
@@ -261,12 +263,14 @@ async def file_option_choice(callback: types.CallbackQuery, state: FSMContext):
 
 @router.message(UploadFile.file_awaiting)
 async def add_file(message: types.Message, state: FSMContext):
-    if message.content_type != types.ContentType.DOCUMENT:
+    if message.content_type not in [types.ContentType.PHOTO, types.ContentType.DOCUMENT, types.ContentType.AUDIO,
+                                    types.ContentType.VIDEO]:
         await message.answer(core.locale.file_invalid)
     else:
         db = await aiosqlite.connect(settings.bot.DB_PATH)
-        query = '''INSERT INTO files (file_id, name, user_id) VALUES (?, ?, ?);'''
-        await db.execute(query, (message.document.file_id, message.document.file_name, message.from_user.id))
+        query = str(f'''INSERT INTO files (id, name, user_id)
+                    VALUES ("{message.document.file_id}", "{message.document.file_name}", {message.from_user.id})''')
+        await db.execute(query)
         await db.commit()
         await db.close()
         await state.clear()
@@ -276,7 +280,7 @@ async def add_file(message: types.Message, state: FSMContext):
 async def create_files_list(files):
     keyboard = []
     for i, row in enumerate(files):
-        keyboard.append([InlineKeyboardButton(text=f'file_{i}', callback_data=' '.join(row))])
+        keyboard.append([InlineKeyboardButton(text=row[1], callback_data=row[1])])
     keyboard.append([InlineKeyboardButton(text='Закрыть ❌', callback_data='close_files_list')])
     keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard)
     return keyboard
@@ -285,22 +289,39 @@ async def create_files_list(files):
 @router.callback_query(F.data == 'list_files')
 async def list_files(callback: types.CallbackQuery, state: FSMContext):
     db = await aiosqlite.connect(settings.bot.DB_PATH)
-    cursor = await db.execute(f'''SELECT file_id, name FROM files''')
+    print(callback.from_user.id)
+    query = str(f'''SELECT id, name FROM files WHERE user_id = {callback.from_user.id}''')
+    cursor = await db.execute(query)
     data = await cursor.fetchall()
+    print(data)
     await cursor.close()
     await db.close()
     if data:
         await state.set_state(GetFile.file_awaiting)
         keyboard = await create_files_list(data)
-        await callback.message.edit_text(text=core.locale.file_list, reply_markup=keyboard)
-        print('dgf')
+        await state.update_data(files=data)
+        await callback.message.edit_text(core.locale.file_list, reply_markup=keyboard)
     else:
-        await callback.message.edit_text(core.locale.file_list_empty, reply_markup=core.keyboards.main_table)
+        await callback.message.edit_text(core.locale.file_list_empty)
 
 
 @router.callback_query(GetFile.file_awaiting)
-async def get_file(bot: Bot, callback: types.CallbackQuery, state: FSMContext):
-    file_id, text = callback.data.split(' ')
-    await callback.message.edit_text(text=text)
-    await bot.send_document(chat_id=callback.message.chat_id, document=file_id)
+async def get_file(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    data = data['files']
+    file_id, name = '', ''
+    for row in data:
+        print(callback.data)
+        if row[1] == callback.data:
+            print(row)
+            file_id = row[0]
+            name = row[1]
+            break
+    await callback.message.edit_text(text=name)
+    await bot.send_document(chat_id=callback.from_user.id, document=file_id)
     await state.clear()
+
+
+@router.callback_query(F.data == 'close_files_list')
+async def close_files_list(callback: types.CallbackQuery):
+    await callback.message.edit_text(text='Закрыто', reply_markup=core.keyboards.main_table)

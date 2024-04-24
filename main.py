@@ -15,7 +15,6 @@ settings = load_config('config.ini')
 
 apsched = AsyncIOScheduler()
 
-
 async def reminder_task(bot: Bot, chat_id, message, time='', day=''):
     text = f'''<u><b>Напоминание!</b></u>
     
