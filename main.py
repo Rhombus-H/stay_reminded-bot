@@ -1,7 +1,7 @@
 import asyncio
-from datetime import datetime
-
+import datetime as dt
 from aiogram import Bot, Dispatcher
+from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 import aiosqlite
 import logging
@@ -16,49 +16,57 @@ settings = load_config('config.ini')
 apsched = AsyncIOScheduler()
 
 
-async def reminder_task(bot: Bot, chat_id, message):
-    await bot.send_message(chat_id=chat_id, text=message)
+async def reminder_task(bot: Bot, chat_id, message, time, day):
+    text = f'''<u><b>Напоминание!</b></u>
+    
+<b>От:</b> {time}, {day}
+<b>Содержание: </b> {message}'''
+    text = str(text)
+    await bot.send_message(chat_id=chat_id, text=text, parse_mode=ParseMode.HTML)
 
 
 async def schedule_reminders(bot: Bot):
     db = await aiosqlite.connect(settings.bot.DB_PATH)
     cursor = await db.execute(f'''SELECT * FROM reminders WHERE scheduled = 0''')
     data = await cursor.fetchall()
-    print(data)
-    # await db.execute(f'''UPDATE reminders SET scheduled = 1''')
-    # await db.commit()
+    await db.execute(f'''UPDATE reminders SET scheduled = 1''')
+    await db.commit()
     await cursor.close()
     await db.close()
-    print('yes')
     print(apsched.get_jobs())
     for i in data:
-        print(len(i))
-        text, time, user_id, period, timezone = list(i)[1:6]
-        print(text, time, user_id, period, timezone)
-        print(time)
-        hours = time.split(':')[0]
-        minutes = time.split(':')[1]
-        print(i)
-        print(translate(period))
-        print(hours, minutes)
-        print(timezone)
+        print('dassdadas')
+        text, time, user_id, period, timezone, scheduled = list(i)[1:7]
+        hours = time.split()[0].split(':')[0]
+        print(hours)
+        minutes = time.split()[0].split(':')[-1]
+        print(minutes)
+        day = time.split()[-1] + '.' + dt.datetime.today().strftime('%Y-%m-%d').split('-')[0]
+        time = time.split()[0]
+        print(day)
         if period != 'none':
             apsched.add_job(
-                reminder_task(bot=bot, chat_id=user_id, message=text),
+                await reminder_task(bot=bot, chat_id=user_id, message=text, time=time, day=day),
                 trigger='cron',
-                start_date=datetime.now(),
+                start_date=dt.datetime.now(),
                 day_of_week=translate(period),
                 hour=hours,
                 minute=minutes,
                 timezone=timezone + ':00'
             )
         else:
+            print(dt.datetime.strptime(day, '%d.%m.%Y'))
+            print(dt.datetime.strptime(time.split()[0], '%H:%M').time())
+            print(dt.datetime.combine(dt.datetime.strptime(day, '%d.%m.%Y').date(),
+                                      dt.datetime.strptime(time.split()[0], '%H:%M').time()))
             apsched.add_job(
-                reminder_task(bot=bot, chat_id=user_id, message=text),
-                trigger='date'
+                await reminder_task(bot=bot, chat_id=user_id, message=text),
+                trigger='date',
+                run_date=dt.datetime.combine(dt.datetime.strptime(day, '%d.%m.%Y').date(),
+                                             dt.datetime.strptime(time.split()[0], '%H:%M').time())
             )
+            print('rrr')
         apsched.start()
-
 
 
 async def start():
@@ -66,16 +74,16 @@ async def start():
         level=logging.INFO,
         filename='bot.log',
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
+    )
 
     bot = Bot(token=settings.bot.TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
     dp.include_router(router)
 
+    await set_commands(bot)
+    scheduler = AsyncIOScheduler()
     apsched.add_job(schedule_reminders, trigger='interval', seconds=2, kwargs={'bot': bot})
     apsched.start()
-    await set_commands(bot)
-    # scheduler = AsyncIOScheduler()
     try:
         await dp.start_polling(bot)
     finally:

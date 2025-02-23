@@ -1,10 +1,12 @@
 import aiosqlite
-from aiogram import F, Router, types
+from aiogram import Bot, F, Router, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
 import core.locale
 import core.keyboards
-from core.states import SetReminder, SetTimezone
+from core.states import SetReminder, SetTimezone, GetFile, DeleteReminder
 from core.config_parser import load_config
 import core.utils
 import datetime
@@ -20,7 +22,7 @@ settings = load_config('config.ini')
 async def start(message: types.Message):
     db = await aiosqlite.connect(settings.bot.DB_PATH)
     cur = await db.cursor()
-    await cur.execute(f'INSERT OR IGNORE INTO users (user_id) VALUES ({message.from_user.id})')
+    await cur.execute(f'INSERT OR IGNORE INTO users (id) VALUES ({message.from_user.id})')
     print('ase')
     await db.commit()
     await cur.close()
@@ -34,12 +36,10 @@ async def start(message: types.Message):
 async def cancel(message: types.Message, state: FSMContext):
     if await state.get_state():
         await state.clear()
-        await message.answer(core.locale.cancel)
+        await message.answer(core.locale.cancel, reply_markup=core.keyboards.main_table)
 
 
-@router.message(F.text == 'Меню')
-@router.message(F.text == 'В меню')
-@router.message(F.text == 'В главное меню')
+@router.message(Command('menu'))
 async def menu(message: types.Message):
     await message.answer(
         core.locale.in_the_menu,
@@ -60,18 +60,44 @@ async def set_timezone(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.edit_text(core.locale.set_timezone)
 
 
+async def list_reminders(reminders):
+    reminders_list = []
+    for i in enumerate(reminders, start=1):
+        n, reminder = i
+        if reminder['period'] != 'none':
+            reminders_list.append([
+                InlineKeyboardButton(text=f'"{reminder['text']}" на {reminder['time']} ({reminder['period']})',
+                                     callback_data=f'{n}')
+            ])
+        else:
+            reminders_list.append([
+                InlineKeyboardButton(text=f'"{reminder['text']}" на {reminder['time']}',
+                                     callback_data=f'{n}')
+            ])
+    if reminders_list:
+        reminders_list.append([InlineKeyboardButton(text='Закрыть ❌', callback_data='close_reminders_list')])
+        reminders_list = InlineKeyboardMarkup(inline_keyboard=reminders_list)
+    return reminders_list
+
+
+@router.callback_query(F.data == 'close_reminders_list')
+async def close_reminders_list(callback: types.CallbackQuery):
+    await callback.message.edit_text(text='Закрыто', reply_markup=core.keyboards.main_table)
+
+
 @router.callback_query(F.data == 'list_reminders')
-async def list_reminders(callback: types.CallbackQuery):
-    print('asdasdasd')
+async def get_list_reminders(callback: types.CallbackQuery):
     db = await aiosqlite.connect(settings.bot.DB_PATH)
-    cur = await db.execute(f'''SELECT text, time, period FROM reminders''')
+    db.row_factory = aiosqlite.Row
+    cur = await db.execute(f'''SELECT text, time, period FROM reminders WHERE user_id = {callback.from_user.id}''')
     data = await cur.fetchall()
-    print('asasdasdasda')
+    reminders_list = await list_reminders(data)
     await cur.close()
     await db.close()
-    print(data)
-    await callback.message.edit_text(text=core.locale.reminders_list,
-                                     reply_markup=core.keyboards.reminders_list(list(data)))
+    if reminders_list:
+        await callback.message.edit_text(core.locale.reminders_list, reply_markup=reminders_list)
+    else:
+        await callback.message.edit_text(core.locale.no_reminders_found, reply_markup=core.keyboards.main_table)
 
 
 @router.message(SetTimezone.timezone_input)
@@ -79,7 +105,7 @@ async def get_timezone(message: types.Message, state: FSMContext):
     pattern = re.compile(r'^UTC([+-]1[0-2]|-[0-9]|[0-9])$')
     if re.match(pattern, message.text):
         db = await aiosqlite.connect(settings.bot.DB_PATH)
-        await db.execute('UPDATE users SET timezone = ? WHERE user_id = ?',
+        await db.execute('UPDATE users SET timezone = ? WHERE id = ?',
                          (message.text, message.from_user.id))
         await db.commit()
         await db.close()
@@ -90,8 +116,40 @@ async def get_timezone(message: types.Message, state: FSMContext):
 
 
 @router.callback_query(F.data == 'delete_reminder')
-async def delete_reminder(callback: types.CallbackQuery):
-    pass  # todo: вызов списка напоминалок как клавиатуры и последующие действия с каждым
+async def reminder_del_choice(callback: types.CallbackQuery, state: FSMContext):
+    db = await aiosqlite.connect(settings.bot.DB_PATH)
+    db.row_factory = aiosqlite.Row
+    cur = await db.execute(f'''SELECT text, time, period FROM reminders WHERE user_id = {callback.from_user.id}''')
+    data = await cur.fetchall()
+    reminders_to_del = await list_reminders(data)
+    print(reminders_to_del)
+    reminders = {}
+    for i in enumerate(data):
+        n, reminder = i
+        reminders[reminders_to_del.inline_keyboard[n][0].callback_data] = dict(reminder)
+    print(reminders)
+    await db.close()
+    print(reminders_to_del)
+    await callback.message.edit_text(core.locale.delete_reminder, reply_markup=reminders_to_del)
+    await state.set_state(DeleteReminder.awaiting_reminder_name)
+    await state.update_data(reminders=reminders)
+
+
+@router.message(DeleteReminder.awaiting_reminder_name)
+async def delete_reminder(callback: types.CallbackQuery, state: FSMContext):
+    reminders_to_del = await state.get_data()
+    reminders_to_del = reminders_to_del['reminders']
+    db = await aiosqlite.connect(settings.DB_PATH)
+    cur = await db.execute(f'''DELETE FROM reminders WHERE user_id, text, time = (?, ?, ?)''',
+                           (reminders_to_del[callback.data]['user_id'],
+                            reminders_to_del[callback.data]['text'],
+                            reminders_to_del[callback.data]['time']))
+    await db.commit()
+    await cur.close()
+    await db.close()
+    await callback.message.edit_text(core.locale.reminder_deleted.format(
+        f'"{reminders_to_del[callback.data]['text']}" на {reminders_to_del[callback.data]['time']}'),
+        reply_markup=core.keyboards.main_table)
 
 
 @router.callback_query(F.data == 'set_reminder')
@@ -119,17 +177,35 @@ async def get_reminder_time(message: types.Message, state: FSMContext):
         else:
             print('s')
             await state.set_state(SetReminder.reminder_date_input)
+            print('((')
             await message.answer(core.locale.reminder_date)
     else:
         await message.answer(core.locale.time_format_invalid)
 
+
 @router.message(SetReminder.reminder_date_input)
 async def get_reminder_date(message: types.Message, state: FSMContext):
-    if re.match(re.compile(r'(0[1-9]|1[1,2])\.(0[1-9]|[12][0-9]|3[01])'), message.text):
-        await state.update_data(date=message.text)
-        await state.set_state(SetReminder.reminder_text_input)
+    today = datetime.date.today().strftime('%d.%m')
+    if datetime.datetime.strptime(today, '%d.%m') <= datetime.datetime.strptime(message.text, '%d.%m'):
+        data = await state.get_data()
+        time = datetime.datetime.strptime(data['reminder_time'], '%H:%M').time()
+        date = message.text
+        print(time)
+        print(datetime.datetime.now().hour, datetime.datetime.now().minute)
+        print('.'.join(datetime.datetime.now().date().strftime('%Y-%m-%d').split('-')[1:][::-1]))
+        print(date)
+        if datetime.datetime.strptime(today, '%d.%m') <= datetime.datetime.strptime(date, '%d.%m') and \
+                time > datetime.datetime.now().time():
+            print('dsd')
+            await state.update_data(date=date)
+            await state.set_state(SetReminder.reminder_text_input)
+            await message.answer(core.locale.reminder_text)
+        else:
+            await message.answer(core.locale.time_selected_invalid)
     else:
         await message.answer(core.locale.time_format_invalid)
+
+
 @router.message(SetReminder.reminder_period_input)
 async def get_reminder_period(message: types.Message, state: FSMContext):
     weekdays = set(core.utils.WEEKDAYS.keys())
@@ -156,25 +232,27 @@ async def set_reminder(message: types.Message, state: FSMContext):
         print(data)
         user_id, period, time, text = data['user_id'], '0', data['reminder_time'], data['reminder_text']
         db = await aiosqlite.connect(settings.bot.DB_PATH)
-        cur = await db.execute('SELECT timezone FROM users WHERE user_id = ?', (user_id,))
+        cur = await db.execute('SELECT timezone FROM users WHERE id = ?', (user_id,))
+        print('sir')
         timezone = await cur.fetchone()
         timezone = timezone[0]
         if data['reminder_type'] == core.locale.periodic:
             period = ', '.join(data['reminder_period'].split()).lower()
-            query = '''INSERT INTO reminders (text, time, user_id, period, timezone) VALUES (?, ?, ?, ?, ?);'''
+            print(text, time, user_id, period, timezone)
+            query = '''INSERT INTO reminders (text, time, user_id, period, timezone) VALUES (?, ?, ?, ?, ?)'''
             cur = await db.execute(query, (text, time, user_id, period, timezone))
             print('2')
         else:
             date = data['reminder_time']
-            time = date + time
-            query = '''INSERT INTO reminders (text, time, user_id timezone) VALUES (?, ?, ?, ?);'''
+            time = date + ' ' + data['date']
+            query = '''INSERT INTO reminders (text, time, user_id, timezone) VALUES (?, ?, ?, ?);'''
             cur = await db.execute(query, (text, time, user_id, timezone))
             print('1')
         await db.commit()
         await cur.close()
         await db.close()
         print('sdsd')
-        await message.answer(core.locale.reminder_set)
+        await message.answer(core.locale.reminder_set, reply_markup=core.keyboards.main_table)
         await state.clear()
     else:
         await message.answer(text=core.locale.abort_notifier_creation)
@@ -184,12 +262,40 @@ async def set_reminder(message: types.Message, state: FSMContext):
 @router.message(SetReminder.abort_creation)
 async def cancel_notifier_creation(message: types, state: FSMContext):
     if message.text.lower() == core.locale.yes:
-        await message.answer(core.locale.cancel)
+        await message.answer(core.locale.cancel, reply_markup=core.keyboards.main_table)
         await state.clear()
 
 
 @router.callback_query(F.data == 'add_file')
-async def file_options_choice(callback: types.CallbackQuery):
+async def file_option_choice(callback: types.CallbackQuery, state: FSMContext):
+    await state.set_state(GetFile.file_awaiting)
     await callback.message.edit_text(
-        core.locale.file_awaiting,
-        reply_markup=core.keyboards.close_keyboard())
+        core.locale.file_awaiting)
+
+
+@router.message(GetFile.file_awaiting)
+async def add_file(message: types.Message, state: FSMContext):
+    if message.content_type != types.ContentType.DOCUMENT:
+        await message.answer(core.locale.file_invalid)
+    else:
+        db = await aiosqlite.connect(settings.bot.DB_PATH)
+        print('sugoma')
+        query = '''INSERT INTO files (file_id, name, user_id) VALUES (?, ?, ?);'''
+        await db.execute(query, (message.document.file_id, message.document.file_name, message.from_user.id))
+        print('adasdsadas')
+        await db.commit()
+        await db.close()
+        await state.clear()
+        await message.answer(core.locale.file_success, reply_markup=core.keyboards.main_table)
+
+
+@router.callback_query(F.data == 'list_files')
+async def list_files(callback: types.CallbackQuery, state: FSMContext):
+    db = await aiosqlite.connect(settings.bot.DB_PATH)
+    cursor = await db.execute(f'''SELECT file_id, name FROM files''')
+    data = await cursor.fetchall()
+    await state.clear()
+    if data:
+        await callback.message.edit_text(core.locale.file_list, reply_markup=core.keyboards.files_list(data))
+    else:
+        await callback.message.edit_text(core.locale.file_list_empty, reply_markup=core.keyboards.main_table)

@@ -21,6 +21,23 @@ def reminders_list(reminders):
     )
 
 
+def files_list(file_data):
+    keyboard = []
+    for j in range(len(file_data)):
+        file_name = file_data[j][1]
+        file_id = file_data[j][0]
+        keyboard.append([
+            InlineKeyboardButton(
+                text=file_name,
+                callback_data=file_id
+            )
+        ])
+    return InlineKeyboardMarkup(
+        inline_keyboard=keyboard,
+        resize_keyboard=True
+    )
+
+
 main_table = [
     [InlineKeyboardButton(
         text='📅 Установить напоминалку',

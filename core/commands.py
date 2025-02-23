@@ -11,6 +11,10 @@ async def set_commands(bot: Bot):
         BotCommand(
             command='cancel',
             description='Отмена операции'
+        ),
+        BotCommand(
+            command='menu',
+            description='Вызов меню'
         )
     ]
     await bot.set_my_commands(commands, BotCommandScopeDefault())
